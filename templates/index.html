@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>电影推荐系统</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body { font-family: 'Segoe UI', sans-serif; background: #f0f2f5; color: #333; }
+        .header {
+            background: linear-gradient(135deg, #1a1a2e, #16213e);
+            color: white; padding: 30px; text-align: center;
+        }
+        .header h1 { font-size: 2em; margin-bottom: 8px; }
+        .header p { color: #aaa; font-size: 0.95em; }
+        .container { max-width: 1000px; margin: 30px auto; padding: 0 20px; }
+        .card {
+            background: white; border-radius: 12px; padding: 24px;
+            margin-bottom: 20px; box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+        }
+        .card h2 { margin-bottom: 16px; color: #1a1a2e; font-size: 1.1em; }
+        .input-row { display: flex; gap: 16px; align-items: flex-end; flex-wrap: wrap; }
+        .input-group { display: flex; flex-direction: column; gap: 4px; }
+        .input-group label { font-size: 0.85em; color: #666; }
+        input[type=number] {
+            padding: 10px 14px; border: 1px solid #ddd; border-radius: 8px;
+            font-size: 1em; width: 130px; outline: none;
+        }
+        input[type=number]:focus { border-color: #4f8ef7; }
+        input[type=range] { width: 200px; accent-color: #4f8ef7; }
+        .slider-row { display: flex; align-items: center; gap: 10px; }
+        .slider-label { font-size: 0.85em; color: #666; min-width: 120px; }
+        .alpha-val { font-weight: bold; color: #4f8ef7; min-width: 30px; }
+        button {
+            padding: 10px 28px;
+            background: linear-gradient(135deg, #4f8ef7, #1a5eff);
+            color: white; border: none; border-radius: 8px;
+            font-size: 1em; cursor: pointer; transition: opacity 0.2s;
+        }
+        button:hover { opacity: 0.9; }
+        button:disabled { opacity: 0.5; cursor: not-allowed; }
+        .grid3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 20px; }
+        .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+        @media (max-width: 768px) {
+            .grid3, .grid2 { grid-template-columns: 1fr; }
+        }
+        .movie-list { list-style: none; }
+        .movie-item {
+            display: flex; align-items: flex-start; padding: 10px 0;
+            border-bottom: 1px solid #f0f0f0; gap: 12px;
+        }
+        .movie-item:last-child { border-bottom: none; }
+        .rank {
+            width: 28px; height: 28px; background: #f0f4ff; color: #4f8ef7;
+            border-radius: 50%; display: flex; align-items: center;
+            justify-content: center; font-size: 0.85em; font-weight: bold; flex-shrink: 0;
+        }
+        .rank.top3 { background: #fff3e0; color: #f57c00; }
+        .movie-info { flex: 1; }
+        .movie-title { font-size: 0.9em; margin-bottom: 3px; }
+        .movie-genres { font-size: 0.75em; color: #999; }
+        .score { font-weight: bold; color: #4f8ef7; font-size: 0.85em; flex-shrink: 0; }
+        .history-item {
+            display: flex; justify-content: space-between; padding: 8px 0;
+            border-bottom: 1px solid #f0f0f0; font-size: 0.88em;
+        }
+        .history-item:last-child { border-bottom: none; }
+        .star { color: #f5a623; }
+        .genre-bar { margin-bottom: 8px; }
+        .genre-name { font-size: 0.82em; color: #555; margin-bottom: 2px; }
+        .bar-wrap { background: #f0f0f0; border-radius: 4px; height: 8px; }
+        .bar-fill { background: #4f8ef7; border-radius: 4px; height: 8px; transition: width 0.4s; }
+        .loading { text-align: center; color: #999; padding: 20px; }
+        .error {
+            color: #e53e3e; padding: 12px; background: #fff5f5;
+            border-radius: 8px; font-size: 0.9em; margin-top: 12px;
+        }
+        .hidden { display: none; }
+        .hint { font-size: 0.78em; color: #bbb; margin-top: 3px; }
+    </style>
+</head>
+<body>
+
+<div class="header">
+    <h1>🎬 电影推荐系统</h1>
+    <p>混合推荐（协同过滤 + 内容过滤）· MovieLens 100K</p>
+</div>
+
+<div class="container">
+    <div class="card">
+        <h2>查询设置</h2>
+        <div class="input-row">
+            <div class="input-group">
+                <label>用户ID</label>
+                <input type="number" id="userId" value="1" min="1" max="{{ max_user }}">
+                <span class="hint">范围：1 ~ {{ max_user }}</span>
+            </div>
+            <div class="input-group">
+                <label>推荐数量</label>
+                <input type="number" id="topN" value="10" min="1" max="20">
+            </div>
+            <div class="input-group">
+                <label>协同过滤权重 (α)</label>
+                <div class="slider-row">
+                    <input type="range" id="alpha" min="0" max="1" step="0.1" value="0.7"
+                           oninput="document.getElementById('alphaVal').textContent=this.value">
+                    <span class="alpha-val" id="alphaVal">0.7</span>
+                </div>
+                <span class="hint">α=1 纯协同过滤，α=0 纯内容过滤</span>
+            </div>
+            <button onclick="getRecommendations()" id="btn">获取推荐</button>
+        </div>
+        <div id="error" class="error hidden"></div>
+    </div>
+
+    <div id="loading" class="card loading hidden">正在计算推荐...</div>
+
+    <div id="results" class="hidden">
+        <div class="grid3">
+            <div class="card" style="grid-column: span 2">
+                <h2>🎯 推荐电影</h2>
+                <ul class="movie-list" id="recList"></ul>
+            </div>
+            <div class="card">
+                <h2>🎭 口味偏好</h2>
+                <div id="prefList"></div>
+            </div>
+        </div>
+        <div class="card">
+            <h2>📋 历史高分电影</h2>
+            <div class="grid2" id="historyList"></div>
+        </div>
+    </div>
+</div>
+
+<script>
+async function getRecommendations() {
+    const userId = document.getElementById('userId').value;
+    const topN = document.getElementById('topN').value;
+    const alpha = document.getElementById('alpha').value;
+    const btn = document.getElementById('btn');
+    const error = document.getElementById('error');
+    const results = document.getElementById('results');
+    const loading = document.getElementById('loading');
+
+    error.classList.add('hidden');
+    results.classList.add('hidden');
+    loading.classList.remove('hidden');
+    btn.disabled = true;
+
+    try {
+        const res = await fetch(`/recommend?user_id=${userId}&top_n=${topN}&alpha=${alpha}`);
+        const data = await res.json();
+
+        if (!res.ok) {
+            error.textContent = data.error || '请求失败';
+            error.classList.remove('hidden');
+            return;
+        }
+
+        // 推荐列表
+        document.getElementById('recList').innerHTML = data.recommendations.map(r => `
+            <li class="movie-item">
+                <div class="rank ${r.rank <= 3 ? 'top3' : ''}">${r.rank}</div>
+                <div class="movie-info">
+                    <div class="movie-title">${r.title}</div>
+                    <div class="movie-genres">${r.genres}</div>
+                </div>
+                <span class="score">⭐ ${r.cf_score}</span>
+            </li>
+        `).join('');
+
+        // 类型偏好
+        const maxCount = Math.max(...data.preferences.map(p => p.count));
+        document.getElementById('prefList').innerHTML = data.preferences.map(p => `
+            <div class="genre-bar">
+                <div class="genre-name">${p.genre} (${p.count})</div>
+                <div class="bar-wrap">
+                    <div class="bar-fill" style="width:${(p.count/maxCount*100).toFixed(0)}%"></div>
+                </div>
+            </div>
+        `).join('');
+
+        // 历史评分
+        document.getElementById('historyList').innerHTML = data.history.map(h => `
+            <div class="history-item">
+                <span>${h.title}</span>
+                <span class="star">${'★'.repeat(h.rating)}${'☆'.repeat(5-h.rating)}</span>
+            </div>
+        `).join('');
+
+        results.classList.remove('hidden');
+
+    } catch (err) {
+        error.textContent = '网络错误，请重试';
+        error.classList.remove('hidden');
+    } finally {
+        loading.classList.add('hidden');
+        btn.disabled = false;
+    }
+}
+</script>
+</body>
+</html>
